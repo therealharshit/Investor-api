@@ -60,7 +60,10 @@ async def stream_query(payload: QueryRequest) -> EventSourceResponse:
         classification = classify(payload.query, history, llm=get_llm())
         if classification.used_fallback:
             for stream_event in finalize(
-                fallback_preamble()
+                [
+                    event("meta", {"status": "fallback"}),
+                    event("thinking", {"message": "Classifying your request..."}),
+                ]
                 + [
                     event(
                         "response",

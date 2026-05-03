@@ -156,7 +156,7 @@ def _build_empty_portfolio_response(user: dict) -> PortfolioHealthResponse:
             Observation(
                 severity="info",
                 text=(
-                    "You do not hold any positions yet, so the most useful first step "
+                    "You have no positions yet, so the most useful first step "
                     "is building a simple diversified starting point."
                 ),
             )

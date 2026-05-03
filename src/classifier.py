@@ -67,7 +67,7 @@ def _extract_tickers(text: str, history_text: list[str]) -> list[str]:
             if alias in lowered and "." not in resolved and " " not in resolved:
                 if resolved not in tickers:
                     tickers.append(resolved)
-        for match in re.findall(r"\b[A-Z]{1,5}(?:\.[A-Z]{1,3})?\b", source):
+        for match in re.findall(r"\b[A-Z]{2,5}(?:\.[A-Z]{1,3})?\b", source):
             resolved = TICKER_ALIASES.get(match.lower(), match.upper())
             if resolved not in tickers and resolved not in {"USD", "EUR", "GBP", "JPY"}:
                 tickers.append(resolved)
@@ -116,7 +116,21 @@ def _extract_topics(text: str) -> list[str]:
 
 def _extract_amount(text: str) -> float | None:
     lowered = text.lower().replace(",", "")
-    match = re.search(r"\b(\d+(?:\.\d+)?)\s*(k)?\b", lowered)
+    contextual_patterns = (
+        r"(?:invest|investing|loan|profit|fund of|convert)\s+(\d+(?:\.\d+)?)\s*(k)?",
+        r"(\d+(?:\.\d+)?)\s*(k)?\s*(?:usd|eur|gbp|jpy)\b",
+        r"(\d+(?:\.\d+)?)\s*(k)?\s*(?:monthly|weekly|daily|yearly)\b",
+    )
+    match = None
+    for pattern in contextual_patterns:
+        match = re.search(pattern, lowered)
+        if match:
+            break
+    if not match:
+        if re.fullmatch(r"\d+(?:\.\d+)?\s*(k)?", lowered.strip()):
+            match = re.search(r"\b(\d+(?:\.\d+)?)\s*(k)?\b", lowered)
+        else:
+            return None
     if not match:
         return None
     amount = float(match.group(1))
@@ -363,4 +377,4 @@ def classify(
     try:
         return ClassificationResult.model_validate(raw)
     except ValidationError:
-        return heuristic
+        return _fallback_classification(query)

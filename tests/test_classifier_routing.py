@@ -115,7 +115,7 @@ def test_classifier_entity_extraction(gold_classifier_queries, mock_llm):
             continue
         total_with_entities += 1
         result = classify(case["query"])
-        if matches_entities(result.entities, case["expected_entities"]):
+        if matches_entities(result.entities.model_dump(), case["expected_entities"]):
             matched += 1
 
     # No assertion — emit a report
