@@ -99,6 +99,7 @@ Notes:
 
 - By default, `src.app` loads users from `fixtures/users/`.
 - If no LLM client is injected, the classifier uses deterministic heuristics.
+- If `OPENAI_API_KEY` is set, `src.app` boots an OpenAI client and the classifier will use it before falling back to the heuristic path.
 - If `yfinance` cannot return live quotes or benchmarks, the health check degrades cleanly and says so in the payload.
 - This keeps the app runnable without secrets and keeps CI stable.
 
@@ -154,7 +155,7 @@ From `.env.example`:
 - `APP_ENV`
 - `DATABASE_URL` only if persistent storage is added later
 
-Current code does not require `OPENAI_API_KEY` for tests or for the heuristic local path.
+Current code does not require `OPENAI_API_KEY` for tests or for the heuristic local path, but it will use the key for live classifier requests when present.
 
 ## Library Choices
 
@@ -185,7 +186,7 @@ That should be added before final project and documented here with real numbers.
 
 ## Known Gaps
 
-- classifier is currently heuristic-first; OpenAI structured-output integration is the next obvious upgrade
+- classifier uses a heuristic fallback path and will call OpenAI when `OPENAI_API_KEY` is present
 - yfinance is useful here but not a production-grade market-data dependency; a hardened provider and cache layer would be the next real-service step
 - I have not yet documented measured latency/cost numbers with a benchmark script
 - README still needs the final demo video URL

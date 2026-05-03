@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 import re
 from typing import Any
 
@@ -46,6 +48,20 @@ TICKER_ALIASES = {
 }
 
 CURRENCY_CODES = {"usd": "USD", "eur": "EUR", "gbp": "GBP", "jpy": "JPY"}
+
+SYSTEM_PROMPT = """You are a financial-intent classifier for a novice-investor assistant.
+Return one JSON object with exactly these top-level keys:
+intent, agent, entities, informational_safety_verdict.
+
+Rules:
+- agent must be one of: customer_support, financial_calculator, financial_planning, general_query, investment_strategy, market_research, portfolio_health, predictive_analysis, product_recommendation, risk_assessment
+- intent should be a short lowercase label
+- entities may include: action, amount, currency, frequency, goal, horizon, index, intent, period_years, rate, sectors, tickers, time_period, topics
+- informational_safety_verdict should be an object with safe (boolean), category (string|null), rationale (string|null)
+- resolve follow-ups using the provided prior conversation
+- do not invent entities that are not supported by the user text or context
+- keep the JSON valid and do not wrap it in markdown
+"""
 
 
 def _normalize_history(history: list[ConversationTurn] | list[str]) -> list[str]:
@@ -357,6 +373,53 @@ def _fallback_classification(query: str) -> ClassificationResult:
     )
 
 
+def _conversation_payload(history: list[ConversationTurn] | list[str]) -> list[dict[str, str]]:
+    payload: list[dict[str, str]] = []
+    for item in history:
+        if isinstance(item, ConversationTurn):
+            payload.append({"role": item.role, "content": item.content})
+        else:
+            payload.append({"role": "user", "content": item})
+    return payload
+
+
+def _openai_classifier_call(query: str, history: list[ConversationTurn] | list[str], client: Any, model: str) -> dict[str, Any]:
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        *(_conversation_payload(history)),
+        {"role": "user", "content": query},
+    ]
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        response_format={"type": "json_object"},
+        temperature=0,
+    )
+    content = response.choices[0].message.content or "{}"
+    return json.loads(content)
+
+
+def build_openai_classifier() -> Any | None:
+    """Return a callable classifier backed by OpenAI when configured."""
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    if not api_key:
+        return None
+
+    try:
+        from openai import OpenAI
+    except Exception:  # pragma: no cover - import path is environment dependent
+        return None
+
+    client = OpenAI(api_key=api_key)
+
+    def _classifier(query: str, history: list[ConversationTurn] | list[str] | None = None) -> dict[str, Any]:
+        return _openai_classifier_call(query, history or [], client, model)
+
+    return _classifier
+
+
 def classify(
     query: str,
     history: list[ConversationTurn] | list[str] | None = None,
@@ -370,11 +433,16 @@ def classify(
         return heuristic
 
     try:
-        raw = llm(query)
+        try:
+            raw = llm(query, history)
+        except TypeError:
+            raw = llm(query)
     except Exception:
         return heuristic
 
     try:
+        if isinstance(raw, str):
+            raw = json.loads(raw)
         return ClassificationResult.model_validate(raw)
-    except ValidationError:
+    except (ValidationError, json.JSONDecodeError, TypeError):
         return _fallback_classification(query)
