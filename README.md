@@ -17,14 +17,15 @@ Implemented:
 - local safety guard with category-specific refusals
 - in-memory session memory keyed by `session_id`
 - heuristic classifier with conversation carryover and safe fallback behavior
-- portfolio health agent with concentration analysis, benchmark selection, empty-portfolio BUILD branch, and next-action output
+- yfinance-backed market-data adapter with degraded fallback behavior
+- portfolio health agent with concentration analysis, benchmark selection, empty-portfolio BUILD branch, live/degraded market-data handling, and next-action output
 - SSE endpoint with explicit event types
 - passing test suite
 
 Deferred on purpose:
 
 - durable session storage
-- production-grade market data provider and caching
+- production-grade market data provider hardening and caching
 - real LLM eval suite beyond mocked CI
 
 ## Architecture
@@ -46,6 +47,7 @@ POST /query/stream
 - **In-memory sessions**: enough to satisfy same-conversation follow-ups without spending project time on database lifecycle.
 - **Shared SSE presenter**: keeps success, fallback, and stub paths consistent.
 - **Thin market-data seam**: isolates the most likely future provider swap without pretending this needs a provider platform today.
+- **Provider-backed but degradable market data**: the current build will use `yfinance` when available and fall back to clear warnings rather than crashing when live data is unavailable.
 - **Heuristic-first classifier**: gives deterministic tests and a working local path even when no OpenAI client is configured.
 
 ## Key Decisions
@@ -97,7 +99,39 @@ Notes:
 
 - By default, `src.app` loads users from `fixtures/users/`.
 - If no LLM client is injected, the classifier uses deterministic heuristics.
+- If `yfinance` cannot return live quotes or benchmarks, the health check degrades cleanly and says so in the payload.
 - This keeps the app runnable without secrets and keeps CI stable.
+
+## Example SSE Output
+
+For `usr_003` with `how is my portfolio doing?`, the stream currently looks like:
+
+```text
+event: meta
+data: {"status": "started"}
+
+event: thinking
+data: {"message": "Analyzing your holdings..."}
+
+event: thinking
+data: {"message": "Comparing to your benchmark..."}
+
+event: thinking
+data: {"message": "Flagging what matters most..."}
+
+event: response
+data: {"payload": {"concentration_risk": {"top_position_pct": 79.8, "top_3_positions_pct": 94.3, "flag": "high"}, ...}}
+
+event: done
+data: {"status": "complete"}
+```
+
+For `usr_004` with no positions, the same endpoint produces a BUILD-oriented response instead of an error:
+
+```text
+event: response
+data: {"payload": {"observations": [{"text": "You have no positions yet..."}], "next_action": {"label": "Start with a diversified core allocation"}, ...}}
+```
 
 ## Running Tests
 
@@ -108,7 +142,7 @@ Notes:
 Latest local result in this environment:
 
 ```text
-13 passed in 0.12s
+15 passed in 0.18s
 ```
 
 ## Environment Variables
@@ -127,6 +161,7 @@ Current code does not require `OPENAI_API_KEY` for tests or for the heuristic lo
 - **FastAPI**: boring default for a small Python service
 - **sse-starlette**: simplest path to named SSE events
 - **Pydantic v2**: typed boundaries for request, classifier, and agent outputs
+- **yfinance**: lowest-friction way to add live quote and benchmark lookups in a self-hosted project repo
 - **pytest**: simple contract-driven test setup
 
 I did not add a database client, retry framework, caching layer, or pandas/numpy yet because that would spend complexity before the current service needs it.
@@ -150,8 +185,9 @@ That should be added before final project and documented here with real numbers.
 
 ## Known Gaps
 
-- market-data adapter is still a seam, not a live provider-backed implementation
 - classifier is currently heuristic-first; OpenAI structured-output integration is the next obvious upgrade
+- yfinance is useful here but not a production-grade market-data dependency; a hardened provider and cache layer would be the next real-service step
+- I have not yet documented measured latency/cost numbers with a benchmark script
 - README still needs the final demo video URL
 
 ## Commit Strategy
@@ -162,6 +198,7 @@ I kept this incremental on purpose. Large commits are acceptable for this projec
 2. test harness and SSE contracts
 3. classifier and portfolio-health implementation
 4. contract fixes driven by test failures
+5. provider-backed market data and project polish
 
 ## demo Video
 
