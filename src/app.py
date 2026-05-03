@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+import json
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
@@ -28,14 +30,22 @@ app.state.user_loader = None
 
 
 def get_llm() -> Any:
-    if app.state.llm is None:
-        raise NotImplementedError("Inject the OpenAI client during implementation.")
     return app.state.llm
+
+
+def _default_user_loader(user_id: str) -> dict:
+    fixtures_dir = Path(__file__).resolve().parent.parent / "fixtures" / "users"
+    for path in fixtures_dir.glob("*.json"):
+        with path.open(encoding="utf-8") as handle:
+            user = json.load(handle)
+        if user["user_id"] == user_id:
+            return user
+    raise KeyError(f"Unknown user_id: {user_id}")
 
 
 def get_user(user_id: str) -> dict:
     if app.state.user_loader is None:
-        raise NotImplementedError(f"Load user profile for {user_id}.")
+        return _default_user_loader(user_id)
     return app.state.user_loader(user_id)
 
 

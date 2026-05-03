@@ -1,81 +1,168 @@
-[![Review project Due Date](https://github.github.com/assets/timeline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://github.github.com/a/SHM9MYZJ)
-# Investor Copilot API — Personal Project
+# Investor Copilot API
 
-You have been given access to this repository as part of the Investor Copilot API Core hiring process.
+FastAPI microservice for a novice-investor copilot. The current build focuses on the project spine:
 
-**Read [`project.md`](project.md) in full before writing a single line of code.**
+- synchronous safety guard
+- single classifier entrypoint
+- deterministic router
+- one implemented `portfolio_health` agent
+- SSE-only response flow
 
----
+The product goal for this build is simple: make portfolio questions feel like they hit a live co-investor, not a generic chat endpoint.
 
-## What you're building
+## Current Status
 
-An AI agent ecosystem that helps a novice investor **build, monitor, grow, and protect** their portfolio. See [`project.md`](project.md) for the full mission, scope, and constraints.
+Implemented:
 
----
+- local safety guard with category-specific refusals
+- in-memory session memory keyed by `session_id`
+- heuristic classifier with conversation carryover and safe fallback behavior
+- portfolio health agent with concentration analysis, benchmark selection, empty-portfolio BUILD branch, and next-action output
+- SSE endpoint with explicit event types
+- passing test suite
 
-## Setup
+Deferred on purpose:
 
-**Requirements:** Python 3.11+, an OpenAI API key.
+- durable session storage
+- production-grade market data provider and caching
+- real LLM eval suite beyond mocked CI
 
-**Persistence is your choice.** Postgres, SQLite, or in-memory — pick one and defend it in your README. `DATABASE_URL` in `.env.example` is optional.
+## Architecture
 
-**Streaming is required.** SSE only. Use `sse-starlette`, FastAPI's `StreamingResponse`, or roll your own — your call.
-
-```bash
-git clone <your-github-repo-url>
-cd <repo-name>
-
-python -m venv venv
-source venv/bin/activate        # Linux/macOS
-venv\Scripts\activate           # Windows
-
-pip install -r requirements.txt
-
-cp .env.example .env
-# Fill in OPENAI_API_KEY
+```text
+POST /query/stream
+  -> safety.check
+  -> session_store.get(session_id)
+  -> classifier.classify(query, history)
+     -> fallback branch if model output is invalid
+  -> router.dispatch(agent)
+     -> portfolio_health | structured stub
+  -> stream_presenter.format SSE events
+  -> session_store.append user/assistant turns
 ```
 
-Use `gpt-4o-mini` while developing to keep costs down. Evaluation runs against `gpt-4.1`.
+### Why this shape
 
----
+- **In-memory sessions**: enough to satisfy same-conversation follow-ups without spending project time on database lifecycle.
+- **Shared SSE presenter**: keeps success, fallback, and stub paths consistent.
+- **Thin market-data seam**: isolates the most likely future provider swap without pretending this needs a provider platform today.
+- **Heuristic-first classifier**: gives deterministic tests and a working local path even when no OpenAI client is configured.
+
+## Key Decisions
+
+### 1. Session memory is explicit, not magical
+
+Every request carries a `session_id`. The service stores a bounded window of prior turns per session. This is small enough for the project and clear enough to explain in the video.
+
+### 2. Benchmark selection is holdings-driven
+
+The portfolio health agent does not default everything to the S&P 500. It picks the benchmark from the dominant market by portfolio weight, then falls back to `MSCI World` for mixed portfolios.
+
+### 3. Classifier failure is honest
+
+If classifier output is malformed, the stream stays alive and returns a calm fallback asking the user to rephrase. It does not pretend it understood.
+
+### 4. Empty portfolio is a real product path
+
+`user_004_empty` routes to a BUILD-oriented response with a first move and next action, not an apology.
+
+## Running Locally
+
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+Run the service:
+
+```bash
+uvicorn src.app:app --reload
+```
+
+Example request:
+
+```bash
+curl -N -X POST http://127.0.0.1:8000/query/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "demo-1",
+    "user_id": "usr_003",
+    "query": "how is my portfolio doing?"
+  }'
+```
+
+Notes:
+
+- By default, `src.app` loads users from `fixtures/users/`.
+- If no LLM client is injected, the classifier uses deterministic heuristics.
+- This keeps the app runnable without secrets and keeps CI stable.
 
 ## Running Tests
 
 ```bash
-pytest tests/ -v
+./venv/bin/python -m pytest tests/ -v
 ```
 
-Tests must pass without an `OPENAI_API_KEY` set — mock the LLM. We will run `pytest tests/ -v` on your repo.
+Latest local result in this environment:
 
----
-
-## Repository Structure
-
-When you submit, your repository must contain:
-
-```
-README.md   ← overwrite this with your own (setup, decisions, library choices, video link)
-src/        ← all code
-tests/      ← all tests, must pass with pytest
+```text
+13 passed in 0.12s
 ```
 
-`fixtures/`, `pytest.ini`, `requirements.txt`, `.env.example`, and `.github/` are part of the scaffold — leave them in place. Do not delete `project.md`.
+## Environment Variables
 
----
+From `.env.example`:
 
-## project
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `APP_ENV`
+- `DATABASE_URL` only if persistent storage is added later
 
-- Push commits **throughout** your work — we read the git log
-- Your `README.md` must:
-  - Explain how to run your code
-  - List every required environment variable
-  - Document the non-obvious decisions you made
-  - Link your demo video (≤ 10 min — see `project.md`)
-- timeline: **3 days** from the date you accepted this project
-- demo video: due within **24 hours** of your final commit
+Current code does not require `OPENAI_API_KEY` for tests or for the heuristic local path.
 
----
+## Library Choices
 
-## Environment
+- **FastAPI**: boring default for a small Python service
+- **sse-starlette**: simplest path to named SSE events
+- **Pydantic v2**: typed boundaries for request, classifier, and agent outputs
+- **pytest**: simple contract-driven test setup
 
-You self-host everything. We do not provide credentials. See `.env.example` for the variables you'll need.
+I did not add a database client, retry framework, caching layer, or pandas/numpy yet because that would spend complexity before the current service needs it.
+
+## Performance and Cost Posture
+
+This implementation is still intentionally lightweight, but the main posture is already in place:
+
+- first stream event is emitted before classifier/agent work completes
+- classifier is one call max in the intended LLM path
+- no LLM call at all in the safety guard
+- bounded session-memory window keeps context small
+
+I have not yet added a formal benchmark harness for:
+
+- p95 first-token latency
+- p95 end-to-end latency
+- estimated `gpt-4.1` cost per query
+
+That should be added before final project and documented here with real numbers.
+
+## Known Gaps
+
+- market-data adapter is still a seam, not a live provider-backed implementation
+- classifier is currently heuristic-first; OpenAI structured-output integration is the next obvious upgrade
+- README still needs the final demo video URL
+
+## Commit Strategy
+
+I kept this incremental on purpose. Large commits are acceptable for this project, but the repo should still show logical units:
+
+1. core boundaries
+2. test harness and SSE contracts
+3. classifier and portfolio-health implementation
+4. contract fixes driven by test failures
+
+## demo Video
+
+Add final video URL here before project.
