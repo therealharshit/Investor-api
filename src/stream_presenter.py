@@ -15,6 +15,7 @@ stub:
 from __future__ import annotations
 
 from collections.abc import Iterable
+import json
 from typing import Literal
 
 from src.models import StreamEvent
@@ -47,3 +48,10 @@ def finalize(events: Iterable[StreamEvent]) -> list[StreamEvent]:
     materialized = list(events)
     materialized.append(event("done", {"status": "complete"}))
     return materialized
+
+
+def to_sse_message(stream_event: StreamEvent) -> dict[str, str]:
+    return {
+        "event": stream_event.event,
+        "data": json.dumps(stream_event.data),
+    }

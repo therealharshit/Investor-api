@@ -13,18 +13,30 @@ from src.models import ConversationTurn, QueryRequest
 from src.router import dispatch
 from src.safety import guard
 from src.session_store import InMemorySessionStore
-from src.stream_presenter import event, fallback_preamble, finalize, success_preamble
+from src.stream_presenter import (
+    event,
+    fallback_preamble,
+    finalize,
+    success_preamble,
+    to_sse_message,
+)
 
 app = FastAPI(title="Investor Copilot API")
 session_store = InMemorySessionStore()
+app.state.llm = None
+app.state.user_loader = None
 
 
 def get_llm() -> Any:
-    raise NotImplementedError("Inject the OpenAI client during implementation.")
+    if app.state.llm is None:
+        raise NotImplementedError("Inject the OpenAI client during implementation.")
+    return app.state.llm
 
 
 def get_user(user_id: str) -> dict:
-    raise NotImplementedError(f"Load user profile for {user_id}.")
+    if app.state.user_loader is None:
+        raise NotImplementedError(f"Load user profile for {user_id}.")
+    return app.state.user_loader(user_id)
 
 
 @app.post("/query/stream")
@@ -38,12 +50,12 @@ async def stream_query(payload: QueryRequest) -> EventSourceResponse:
                     event("error", safety_verdict.model_dump(mode="json")),
                 ]
             ):
-                yield stream_event.model_dump(mode="json")
+                yield to_sse_message(stream_event)
             return
 
         history = session_store.get_history(payload.session_id)
         for stream_event in success_preamble()[:1]:
-            yield stream_event.model_dump(mode="json")
+            yield to_sse_message(stream_event)
 
         classification = classify(payload.query, history, llm=get_llm())
         if classification.used_fallback:
@@ -61,7 +73,7 @@ async def stream_query(payload: QueryRequest) -> EventSourceResponse:
                     )
                 ]
             ):
-                yield stream_event.model_dump(mode="json")
+                yield to_sse_message(stream_event)
             return
 
         user = get_user(payload.user_id)
@@ -80,6 +92,6 @@ async def stream_query(payload: QueryRequest) -> EventSourceResponse:
             success_preamble()[1:]
             + [event("response", {"payload": result.model_dump(mode="json")})]
         ):
-            yield stream_event.model_dump(mode="json")
+            yield to_sse_message(stream_event)
 
     return EventSourceResponse(generate())
