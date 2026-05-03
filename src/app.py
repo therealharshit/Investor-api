@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from sse_starlette import EventSourceResponse
 
 from src.classifier import classify
+from src.market_data import YFinanceMarketDataAdapter
 from src.models import ConversationTurn, QueryRequest
 from src.router import dispatch
 from src.safety import guard
@@ -26,6 +27,7 @@ from src.stream_presenter import (
 app = FastAPI(title="Investor Copilot API")
 session_store = InMemorySessionStore()
 app.state.llm = None
+app.state.market_data = YFinanceMarketDataAdapter()
 app.state.user_loader = None
 
 
@@ -90,7 +92,7 @@ async def stream_query(payload: QueryRequest) -> EventSourceResponse:
             return
 
         user = get_user(payload.user_id)
-        result = dispatch(classification, user)
+        result = dispatch(classification, user, market_data=app.state.market_data)
 
         session_store.append_turn(
             payload.session_id,

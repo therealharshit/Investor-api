@@ -17,6 +17,7 @@ openai>=1.30.0             # OpenAI Python SDK — structured outputs, streaming
 
 # --- Utilities ---
 python-dotenv>=1.0.0
+yfinance>=0.2.54
 
 # --- Testing ---
 pytest>=8.2.0

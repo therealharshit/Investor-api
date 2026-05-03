@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections import Counter
 
+from src.market_data import NullMarketDataAdapter
 from src.models import (
     BenchmarkComparison,
     ConcentrationRisk,
@@ -84,6 +85,8 @@ def _build_observations(
     positions: list[dict],
     concentration_risk: ConcentrationRisk,
     benchmark: str,
+    quote_warnings: list[str],
+    benchmark_warning: str | None,
 ) -> list[Observation]:
     observations: list[Observation] = []
     if concentration_risk.top_position_pct and concentration_risk.top_position_pct >= 50:
@@ -121,6 +124,14 @@ def _build_observations(
             Observation(
                 severity="info",
                 text=f"I used {benchmark} as your comparison point because it best matches the markets your holdings are concentrated in.",
+            )
+        )
+
+    if quote_warnings or benchmark_warning:
+        observations.append(
+            Observation(
+                severity="warning",
+                text="Some live market data was unavailable, so parts of this health check use degraded estimates rather than fresh prices.",
             )
         )
 
@@ -173,38 +184,74 @@ def _build_empty_portfolio_response(user: dict) -> PortfolioHealthResponse:
 
 
 def run(user: dict, market_data=None, llm=None) -> PortfolioHealthResponse:
-    """Temporary skeleton implementation for the hero agent."""
+    """Portfolio health agent with graceful live-data degradation."""
 
-    del market_data, llm
+    del llm
 
     positions = user.get("positions", [])
     if not positions:
         return _build_empty_portfolio_response(user)
 
+    adapter = market_data or NullMarketDataAdapter()
     concentration_risk = _build_concentration_risk(positions)
     benchmark = _select_benchmark(user, positions)
-    observations = _build_observations(user, positions, concentration_risk, benchmark)
-    total_value = sum(_position_value(position) for position in positions)
+    quote_results = adapter.fetch_quotes(positions)
+    benchmark_result = adapter.fetch_benchmark(benchmark)
+
+    live_total_value = sum(
+        quote.market_value
+        for quote in quote_results
+        if quote.market_value is not None
+    )
+    total_cost_basis = sum(_position_value(position) for position in positions)
+    total_gain = sum(
+        (quote.market_value or 0) - _position_value(position)
+        for quote, position in zip(quote_results, positions, strict=False)
+    )
+    portfolio_return_pct = (total_gain / total_cost_basis * 100) if total_cost_basis else None
+    annualized_return_pct = None
+    if portfolio_return_pct is not None:
+        annualized_return_pct = portfolio_return_pct
+
+    observations = _build_observations(
+        user,
+        positions,
+        concentration_risk,
+        benchmark,
+        quote_warnings=[quote.warning for quote in quote_results if quote.warning],
+        benchmark_warning=benchmark_result.warning,
+    )
+    alpha_pct = None
+    if portfolio_return_pct is not None and benchmark_result.return_pct is not None:
+        alpha_pct = round(portfolio_return_pct - benchmark_result.return_pct, 2)
 
     return PortfolioHealthResponse(
         concentration_risk=concentration_risk,
-        performance=PerformanceSummary(total_return_pct=0.0, annualized_return_pct=0.0),
+        performance=PerformanceSummary(
+            total_return_pct=round(portfolio_return_pct, 2) if portfolio_return_pct is not None else None,
+            annualized_return_pct=round(annualized_return_pct, 2) if annualized_return_pct is not None else None,
+        ),
         benchmark_comparison=BenchmarkComparison(
             benchmark=benchmark,
-            portfolio_return_pct=0.0,
-            benchmark_return_pct=0.0,
-            alpha_pct=0.0,
+            portfolio_return_pct=round(portfolio_return_pct, 2) if portfolio_return_pct is not None else None,
+            benchmark_return_pct=benchmark_result.return_pct,
+            alpha_pct=alpha_pct,
+            warning=benchmark_result.warning,
         ),
         observations=observations,
         next_action=_build_next_action(positions, concentration_risk),
         disclaimer=DISCLAIMER,
         position_performance=[
             {
-                "ticker": position["ticker"],
-                "market_value": round(_position_value(position), 2),
-                "return_pct": 0.0,
-                "warning": None,
+                "ticker": quote.ticker,
+                "market_value": quote.market_value,
+                "return_pct": quote.return_pct,
+                "warning": quote.warning,
             }
-            for position in sorted(positions, key=_position_value, reverse=True)
+            for quote in sorted(
+                quote_results,
+                key=lambda quote: quote.market_value or 0,
+                reverse=True,
+            )
         ],
     )
