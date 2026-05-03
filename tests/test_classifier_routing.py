@@ -11,6 +11,8 @@ from typing import Any
 
 import pytest
 
+from src.classifier import classify
+
 
 # ---------------------------------------------------------------------------
 # Entity matcher — implements the rules in fixtures/README.md
@@ -38,6 +40,10 @@ import pytest
 def _normalize_ticker(t: str) -> str:
     """Case-fold and drop the exchange suffix (AAPL.US → AAPL)."""
     return t.upper().split(".")[0]
+
+
+def _normalize_index(value: str) -> str:
+    return value.upper().replace(" ", "")
 
 
 def matches_entities(actual: dict[str, Any], expected: dict[str, Any]) -> bool:
@@ -68,6 +74,9 @@ def matches_entities(actual: dict[str, Any], expected: dict[str, Any]) -> bool:
         elif field == "period_years":
             if int(act_value) != int(exp_value):
                 return False
+        elif field == "index":
+            if _normalize_index(str(act_value)) != _normalize_index(str(exp_value)):
+                return False
         else:
             # Catch-all for vocabulary tokens (action, goal, frequency, horizon,
             # time_period, currency, index). Override per-field if you need more
@@ -81,16 +90,13 @@ def matches_entities(actual: dict[str, Any], expected: dict[str, Any]) -> bool:
 # Routing accuracy — this is the test we score
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skip(reason="Stub — wire up your classifier import below and remove this decorator")
 def test_classifier_routing_accuracy(gold_classifier_queries, mock_llm):
     """
     Threshold: ≥ 85% routing accuracy.
     """
-    # from src.classifier import classify  # noqa: ERA001
-
     correct = 0
     for case in gold_classifier_queries:
-        result = classify(case["query"], llm=mock_llm)  # noqa: F821
+        result = classify(case["query"])
         if result.agent == case["expected_agent"]:
             correct += 1
 
@@ -98,7 +104,6 @@ def test_classifier_routing_accuracy(gold_classifier_queries, mock_llm):
     assert accuracy >= 0.85, f"Routing accuracy {accuracy:.2%} below 85%"
 
 
-@pytest.mark.skip(reason="Stub — wire up your classifier import below and remove this decorator")
 def test_classifier_entity_extraction(gold_classifier_queries, mock_llm):
     """
     Soft signal — not a hard threshold. Reported, not failed on.
@@ -109,10 +114,34 @@ def test_classifier_entity_extraction(gold_classifier_queries, mock_llm):
         if not case["expected_entities"]:
             continue
         total_with_entities += 1
-        result = classify(case["query"], llm=mock_llm)  # noqa: F821
+        result = classify(case["query"])
         if matches_entities(result.entities, case["expected_entities"]):
             matched += 1
 
     # No assertion — emit a report
     rate = matched / total_with_entities if total_with_entities else 0.0
     print(f"\nEntity match rate: {rate:.2%} ({matched}/{total_with_entities})")
+
+
+def test_classifier_conversation_follow_up_resolution(conversation_test_cases):
+    cases = conversation_test_cases("follow_up_session")
+
+    expected_agents = {
+        "portfolio_query": "portfolio_health",
+        "market_research": "market_research",
+        "investment_strategy": "investment_strategy",
+    }
+
+    for case in cases:
+        result = classify(case["current_user_turn"], history=case["prior_user_turns"])
+        assert result.agent.value == expected_agents[case["expected"]["agent"]]
+        assert matches_entities(result.entities.model_dump(), case["expected"]["entities"])
+
+
+def test_classifier_topic_switches_do_not_bleed_context(conversation_test_cases):
+    cases = conversation_test_cases("multi_intent_session")
+
+    for case in cases:
+        result = classify(case["current_user_turn"], history=case["prior_user_turns"])
+        assert result.agent.value == case["expected"]["agent"]
+        assert matches_entities(result.entities.model_dump(), case["expected"]["entities"])

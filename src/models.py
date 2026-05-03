@@ -58,6 +58,7 @@ class ClassifierEntities(BaseModel):
     goal: str | None = None
     horizon: str | None = None
     index: str | None = None
+    intent: str | None = None
     period_years: int | None = None
     rate: float | None = None
     sectors: list[str] = Field(default_factory=list)
