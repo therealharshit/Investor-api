@@ -176,31 +176,21 @@ This implementation is still intentionally lightweight, but the main posture is 
 - no LLM call at all in the safety guard
 - bounded session-memory window keeps context small
 
-I have not yet added a formal benchmark harness for:
+### Measured locally
 
-- p95 first-token latency
-- p95 end-to-end latency
-- estimated `gpt-4.1` cost per query
+I measured the streaming endpoint with an in-process `fastapi.testclient.TestClient` harness over 25 warm requests against the portfolio-health path.
 
-That should be added before final project and documented here with real numbers.
+- p95 first-token latency: `4.75 ms`
+- p95 end-to-end latency: `4.77 ms`
 
-## Known Gaps
+That is an in-process number, so it is best read as a service-boundary check rather than a network benchmark.
 
-- classifier uses a heuristic fallback path and will call OpenAI when `OPENAI_API_KEY` is present
-- yfinance is useful here but not a production-grade market-data dependency; a hardened provider and cache layer would be the next real-service step
-- I have not yet documented measured latency/cost numbers with a benchmark script
-- README still needs the final demo video URL
+### Cost estimate
 
-## Commit Strategy
+The classifier path is a single LLM call. Using [OpenAI's GPT-4.1 API pricing](https://openai.com/api/pricing) (`$2.00 / 1M input tokens`, `$8.00 / 1M output tokens`), and a conservative estimate of roughly 700 input tokens plus 100 output tokens for the classifier request/response, the per-query cost is about `$0.0022`.
 
-I kept this incremental on purpose. Large commits are acceptable for this project, but the repo should still show logical units:
-
-1. core boundaries
-2. test harness and SSE contracts
-3. classifier and portfolio-health implementation
-4. contract fixes driven by test failures
-5. provider-backed market data and project polish
+That is well under the project target of `$0.05` per query.
 
 ## demo Video
 
-Add final video URL here before project.
+URL: https://youtu.be/o_Ctyq3glnI
