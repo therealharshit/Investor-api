@@ -1,1 +1,1 @@
-"""Investor Copilot API service package."""
+"""Investor copilot service package."""

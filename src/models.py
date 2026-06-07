@@ -1,4 +1,4 @@
-"""Core typed contracts for the Investor Copilot API service."""
+"""Core typed contracts for the investor copilot service."""
 
 from __future__ import annotations
 

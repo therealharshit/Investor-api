@@ -1,6 +1,6 @@
 # Investor Copilot API
 
-FastAPI microservice for a novice-investor copilot. The current build focuses on the project spine:
+FastAPI microservice for a novice-investor copilot. The current build focuses on the core service path:
 
 - synchronous safety guard
 - single classifier entrypoint
@@ -44,7 +44,7 @@ POST /query/stream
 
 ### Why this shape
 
-- **In-memory sessions**: enough to satisfy same-conversation follow-ups without spending project time on database lifecycle.
+- **In-memory sessions**: enough to satisfy same-conversation follow-ups while keeping the local development path simple.
 - **Shared SSE presenter**: keeps success, fallback, and stub paths consistent.
 - **Thin market-data seam**: isolates the most likely future provider swap without pretending this needs a provider platform today.
 - **Provider-backed but degradable market data**: the current build will use `yfinance` when available and fall back to clear warnings rather than crashing when live data is unavailable.
@@ -54,7 +54,7 @@ POST /query/stream
 
 ### 1. Session memory is explicit, not magical
 
-Every request carries a `session_id`. The service stores a bounded window of prior turns per session. This is small enough for the project and clear enough to explain in the video.
+Every request carries a `session_id`. The service stores a bounded window of prior turns per session, keeping the app simple while still supporting follow-up questions.
 
 ### 2. Benchmark selection is holdings-driven
 
@@ -162,7 +162,7 @@ Current code does not require `OPENAI_API_KEY` for tests or for the heuristic lo
 - **FastAPI**: boring default for a small Python service
 - **sse-starlette**: simplest path to named SSE events
 - **Pydantic v2**: typed boundaries for request, classifier, and agent outputs
-- **yfinance**: lowest-friction way to add live quote and benchmark lookups in a self-hosted project repo
+- **yfinance**: lowest-friction way to add live quote and benchmark lookups in a self-hosted repo
 - **pytest**: simple contract-driven test setup
 
 I did not add a database client, retry framework, caching layer, or pandas/numpy yet because that would spend complexity before the current service needs it.
@@ -189,8 +189,4 @@ That is an in-process number, so it is best read as a service-boundary check rat
 
 The classifier path is a single LLM call. Using [OpenAI's GPT-4.1 API pricing](https://openai.com/api/pricing) (`$2.00 / 1M input tokens`, `$8.00 / 1M output tokens`), and a conservative estimate of roughly 700 input tokens plus 100 output tokens for the classifier request/response, the per-query cost is about `$0.0022`.
 
-That is well under the project target of `$0.05` per query.
-
-## demo Video
-
-URL: https://youtu.be/o_Ctyq3glnI
+That keeps the classifier path inexpensive enough for personal experimentation.

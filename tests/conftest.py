@@ -1,5 +1,5 @@
 """
-Shared pytest fixtures for the Investor Copilot API project.
+Shared pytest fixtures for the investor copilot service.
 
 The most important fixture here is `mock_llm` — every test that touches the
 classifier or any LLM-using code must use it. CI runs without OPENAI_API_KEY

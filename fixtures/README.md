@@ -1,8 +1,8 @@
 # Fixtures
 
-Sample user-side data for the Investor Copilot API project.
+Sample user-side data for the investor copilot service.
 
-You will not find market data, prices, sector classifications, or benchmarks here. Get those from MCP servers, the `yfinance` package, or any source you choose. **Do not hardcode market data into your code.**
+You will not find market data, prices, sector classifications, or benchmarks here. Get those from `yfinance` or any source you choose. **Do not hardcode market data into your code.**
 
 The data is global — US, UK, EU, Japan, Singapore. Tickers use proper exchange suffixes (`AAPL`, `ASML.AS`, `HSBA.L`, `7203.T`) so they resolve against any market data provider.
 
@@ -56,7 +56,7 @@ Each file contains a `test_cases[]` array. Every test case provides:
 
 ---
 
-## Matching rules (for grading)
+## Matching rules
 
 Your classifier output is matched against the gold files using the following rules:
 
@@ -75,7 +75,7 @@ Your classifier output is matched against the gold files using the following rul
 | `index` (string) | Exact match against the canonical name (`S&P 500`, `FTSE 100`, `NIKKEI 225`, `MSCI World`) |
 | `action`, `goal`, `frequency`, `horizon`, `time_period` | Exact match against the vocabulary in `entity_vocabulary` |
 
-These rules are open. Implement them in your `tests/` matcher. We use the same rules during evaluation.
+These rules are implemented in the test matcher.
 
 ---
 

@@ -1,8 +1,7 @@
 """
-Skeleton test for classifier routing accuracy on the labeled gold set.
+Test classifier routing accuracy on the labeled gold set.
 
-Wire your classifier import and remove the @pytest.mark.skip decorator.
-The success threshold (≥ 85%) is from project.md.
+The success threshold is 85%.
 
 This test demonstrates the entity matcher pattern. The matcher rules are in
 fixtures/README.md — follow them or document any deviations in your README.
@@ -18,7 +17,7 @@ from src.classifier import classify
 # Entity matcher — implements the rules in fixtures/README.md
 # ---------------------------------------------------------------------------
 #
-# This is a STARTER matcher. It covers the most common cases (tickers, topics,
+# This matcher covers the most common cases (tickers, topics,
 # amounts, rates, generic exact-match). Before relying on it for grading, you
 # must extend it to cover the full vocabulary in
 # fixtures/test_queries/intent_classification.json → entity_vocabulary:
@@ -38,7 +37,7 @@ from src.classifier import classify
 # Extend deliberately — document any deviation in your README.
 
 def _normalize_ticker(t: str) -> str:
-    """Case-fold and drop the exchange suffix (AAPL.US → AAPL)."""
+    """Case-fold and drop the exchange suffix, such as AAPL.US to AAPL."""
     return t.upper().split(".")[0]
 
 

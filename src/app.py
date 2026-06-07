@@ -1,4 +1,4 @@
-"""FastAPI entrypoint for the Investor Copilot API service."""
+"""FastAPI entrypoint for the investor copilot service."""
 
 from __future__ import annotations
 
