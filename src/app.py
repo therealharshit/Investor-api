@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from dotenv import load_dotenv
 from sse_starlette import EventSourceResponse
 
-from src.classifier import build_openai_classifier, classify
+from src.classifier import build_llm_classifier, classify
 from src.market_data import YFinanceMarketDataAdapter
 from src.models import ConversationTurn, QueryRequest
 from src.router import dispatch
@@ -28,7 +28,7 @@ from src.stream_presenter import (
 app = FastAPI(title="Investor Copilot API")
 session_store = InMemorySessionStore()
 load_dotenv()
-app.state.llm = build_openai_classifier()
+app.state.llm = build_llm_classifier()
 app.state.market_data = YFinanceMarketDataAdapter()
 app.state.user_loader = None
 

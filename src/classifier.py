@@ -444,29 +444,33 @@ def _llm_classifier_call(
     raise ValueError(f"Unknown LLM provider: {provider}")
 
 
-def _openai_classifier_call(query: str, history: list[ConversationTurn] | list[str], client: Any, model: str) -> dict[str, Any]:
-    return _llm_classifier_call("openai", query, history, client, model)
+def build_llm_classifier() -> Any | None:
+    """Return a callable classifier backed by the configured LLM provider."""
+    # Check Gemini configuration first
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if gemini_key:
+        model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        try:
+            from google import genai
+        except ImportError:  # pragma: no cover
+            return None
 
+        client = genai.Client(api_key=gemini_key)
+        return lambda query, history=None: _llm_classifier_call("gemini", query, history or [], client, model)
 
-def build_openai_classifier() -> Any | None:
-    """Return a callable classifier backed by OpenAI when configured."""
+    # Fallback to OpenAI configuration
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if openai_key:
+        model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        try:
+            from openai import OpenAI
+        except ImportError:  # pragma: no cover
+            return None
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-    if not api_key:
-        return None
+        client = OpenAI(api_key=openai_key)
+        return lambda query, history=None: _llm_classifier_call("openai", query, history or [], client, model)
 
-    try:
-        from openai import OpenAI
-    except Exception:  # pragma: no cover - import path is environment dependent
-        return None
-
-    client = OpenAI(api_key=api_key)
-
-    def _classifier(query: str, history: list[ConversationTurn] | list[str] | None = None) -> dict[str, Any]:
-        return _openai_classifier_call(query, history or [], client, model)
-
-    return _classifier
+    return None
 
 
 def classify(
