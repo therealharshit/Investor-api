@@ -383,20 +383,69 @@ def _conversation_payload(history: list[ConversationTurn] | list[str]) -> list[d
     return payload
 
 
+def _llm_classifier_call(
+    provider: str,
+    query: str,
+    history: list[ConversationTurn] | list[str],
+    client: Any,
+    model: str,
+) -> dict[str, Any]:
+    if provider == "gemini":
+        from google.genai import types
+
+        contents = []
+        for item in history:
+            if isinstance(item, ConversationTurn):
+                role = "model" if item.role == "assistant" else "user"
+                content_text = item.content
+            else:
+                role = "user"
+                content_text = item
+            contents.append(
+                types.Content(
+                    role=role,
+                    parts=[types.Part.from_text(text=content_text)]
+                )
+            )
+        contents.append(
+            types.Content(
+                role="user",
+                parts=[types.Part.from_text(text=query)]
+            )
+        )
+        config = types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            response_mime_type="application/json",
+            temperature=0.0,
+        )
+        response = client.models.generate_content(
+            model=model,
+            contents=contents,
+            config=config,
+        )
+        content = response.text or "{}"
+        return json.loads(content)
+
+    elif provider == "openai":
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            *(_conversation_payload(history)),
+            {"role": "user", "content": query},
+        ]
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            response_format={"type": "json_object"},
+            temperature=0,
+        )
+        content = response.choices[0].message.content or "{}"
+        return json.loads(content)
+
+    raise ValueError(f"Unknown LLM provider: {provider}")
+
+
 def _openai_classifier_call(query: str, history: list[ConversationTurn] | list[str], client: Any, model: str) -> dict[str, Any]:
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        *(_conversation_payload(history)),
-        {"role": "user", "content": query},
-    ]
-    response = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        response_format={"type": "json_object"},
-        temperature=0,
-    )
-    content = response.choices[0].message.content or "{}"
-    return json.loads(content)
+    return _llm_classifier_call("openai", query, history, client, model)
 
 
 def build_openai_classifier() -> Any | None:
