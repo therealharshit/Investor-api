@@ -14,6 +14,7 @@ pydantic>=2.7.0
 
 # --- LLM ---
 openai>=1.30.0             # OpenAI Python SDK - structured outputs, streaming
+google-genai>=0.1.1        # Google GenAI Python SDK - Gemini
 
 # --- Utilities ---
 python-dotenv>=1.0.0
