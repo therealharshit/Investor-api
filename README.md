@@ -48,7 +48,7 @@ POST /query/stream
 - **Shared SSE presenter**: keeps success, fallback, and stub paths consistent.
 - **Thin market-data seam**: isolates the most likely future provider swap without pretending this needs a provider platform today.
 - **Provider-backed but degradable market data**: the current build will use `yfinance` when available and fall back to clear warnings rather than crashing when live data is unavailable.
-- **Heuristic-first classifier**: gives deterministic tests and a working local path even when no OpenAI client is configured.
+- **Heuristic-first classifier**: gives deterministic tests and a working local path even when no LLM provider client is configured.
 
 ## Key Decisions
 
@@ -99,7 +99,7 @@ Notes:
 
 - By default, `src.app` loads users from `fixtures/users/`.
 - If no LLM client is injected, the classifier uses deterministic heuristics.
-- If `OPENAI_API_KEY` is set, `src.app` boots an OpenAI client and the classifier will use it before falling back to the heuristic path.
+- If `GEMINI_API_KEY` is set, the app boots a Gemini client (using the model configured in `GEMINI_MODEL`, defaulting to `gemini-2.5-flash`). If `OPENAI_API_KEY` is set instead, it falls back to booting an OpenAI client (using `OPENAI_MODEL`, defaulting to `gpt-4o-mini`).
 - If `yfinance` cannot return live quotes or benchmarks, the health check degrades cleanly and says so in the payload.
 - This keeps the app runnable without secrets and keeps CI stable.
 
@@ -143,19 +143,21 @@ data: {"payload": {"observations": [{"text": "You have no positions yet..."}], "
 Latest local result in this environment:
 
 ```text
-15 passed in 0.18s
+18 passed in 1.78s
 ```
 
 ## Environment Variables
 
 From `.env.example`:
 
+- `GEMINI_API_KEY`
+- `GEMINI_MODEL`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
 - `APP_ENV`
 - `DATABASE_URL` only if persistent storage is added later
 
-Current code does not require `OPENAI_API_KEY` for tests or for the heuristic local path, but it will use the key for live classifier requests when present.
+Current code does not require API keys (like `GEMINI_API_KEY` or `OPENAI_API_KEY`) for tests or for the heuristic local path, but it will use the key for live classifier requests when present.
 
 ## Library Choices
 
@@ -187,6 +189,12 @@ That is an in-process number, so it is best read as a service-boundary check rat
 
 ### Cost estimate
 
-The classifier path is a single LLM call. Using [OpenAI's GPT-4.1 API pricing](https://openai.com/api/pricing) (`$2.00 / 1M input tokens`, `$8.00 / 1M output tokens`), and a conservative estimate of roughly 700 input tokens plus 100 output tokens for the classifier request/response, the per-query cost is about `$0.0022`.
+The classifier path is a single LLM call.
+- Under **Gemini 2.5 Flash** API pricing (`$0.075 / 1M input tokens`, `$0.30 / 1M output tokens`), a query estimate of 700 input + 100 output tokens costs roughly `$0.00008` (effectively free or covered by Gemini's generous free tier).
+- Under **OpenAI's GPT-4o-mini** pricing (`$0.150 / 1M input tokens`, `$0.600 / 1M output tokens`), the same query costs roughly `$0.00016`.
 
-That keeps the classifier path inexpensive enough for personal experimentation.
+That keeps the classifier path extremely inexpensive for personal experimentation.
+
+## License
+
+MIT © 2026 Harshit Verma. See [LICENSE](LICENSE) for details.
